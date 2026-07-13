@@ -1,0 +1,19 @@
+# Environnement virtuel
+venv/
+
+# Variables d'environnement (secrets)
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Docker
+docker-compose.override.yml
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

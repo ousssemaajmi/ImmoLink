@@ -2,10 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.sql import func
-from uuid import UUID
 
 from app.database import get_db
-from app.models import User, Listing
+from app.models import User, Listing, Category
 from app.utils import get_active_or_404, get_deleted_or_404
 from app.validate import ListingCreate, ListingUpdate, ListingResponse, ApiResponse
 
@@ -18,6 +17,10 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
     user = db.get(User, listing.user_id)
     if not user or user.is_deleted:
         raise HTTPException(status_code=400, detail="user_id invalide : utilisateur introuvable ou supprimé")
+
+    category = db.get(Category, listing.category_id)
+    if not category:
+        raise HTTPException(status_code=400, detail="category_id invalide : catégorie introuvable")
 
     nouvelle_annonce = Listing(**listing.model_dump())
     db.add(nouvelle_annonce)
@@ -36,19 +39,24 @@ def get_all_listings(db: Session = Depends(get_db)):
 
 # ---------- GET BY ID ----------
 @router.get("/{listing_id}", response_model=ApiResponse[ListingResponse])
-def get_listing_by_id(listing_id: UUID, db: Session = Depends(get_db)):
+def get_listing_by_id(listing_id: int, db: Session = Depends(get_db)):
     listing = get_active_or_404(Listing, listing_id, db, "Annonce")
     return ApiResponse(status_code=200, message="Annonce récupérée avec succès", data=listing)
 
 
 # ---------- UPDATE (PATCH) ----------
 @router.patch("/{listing_id}", response_model=ApiResponse[ListingResponse])
-def update_listing(listing_id: UUID, updated: ListingUpdate, db: Session = Depends(get_db)):
+def update_listing(listing_id: int, updated: ListingUpdate, db: Session = Depends(get_db)):
     listing = get_active_or_404(Listing, listing_id, db, "Annonce")
 
     donnees = updated.model_dump(exclude_unset=True)
     if not donnees:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
+
+    if "category_id" in donnees:
+        category = db.get(Category, donnees["category_id"])
+        if not category:
+            raise HTTPException(status_code=400, detail="category_id invalide : catégorie introuvable")
 
     for key, value in donnees.items():
         setattr(listing, key, value)
@@ -60,7 +68,7 @@ def update_listing(listing_id: UUID, updated: ListingUpdate, db: Session = Depen
 
 # ---------- SOFT DELETE ----------
 @router.delete("/{listing_id}/soft", response_model=ApiResponse[ListingResponse])
-def soft_delete_listing(listing_id: UUID, db: Session = Depends(get_db)):
+def soft_delete_listing(listing_id: int, db: Session = Depends(get_db)):
     listing = get_active_or_404(Listing, listing_id, db, "Annonce")
 
     listing.is_deleted = True
@@ -73,7 +81,7 @@ def soft_delete_listing(listing_id: UUID, db: Session = Depends(get_db)):
 
 # ---------- RESTORE ----------
 @router.post("/{listing_id}/restore", response_model=ApiResponse[ListingResponse])
-def restore_listing(listing_id: UUID, db: Session = Depends(get_db)):
+def restore_listing(listing_id: int, db: Session = Depends(get_db)):
     listing = get_deleted_or_404(Listing, listing_id, db, "Annonce")
 
     listing.is_deleted = False
@@ -86,7 +94,7 @@ def restore_listing(listing_id: UUID, db: Session = Depends(get_db)):
 
 # ---------- HARD DELETE ----------
 @router.delete("/{listing_id}/hard", response_model=ApiResponse[None])
-def hard_delete_listing(listing_id: UUID, db: Session = Depends(get_db)):
+def hard_delete_listing(listing_id: int, db: Session = Depends(get_db)):
     listing = db.get(Listing, listing_id)
     if not listing:
         raise HTTPException(status_code=404, detail="Annonce introuvable")

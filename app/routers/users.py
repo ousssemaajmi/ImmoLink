@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.sql import func
-from uuid import UUID
 
 from app.database import get_db
 from app.models import User, Listing
@@ -40,14 +39,14 @@ def get_all_users(db: Session = Depends(get_db)):
 
 # ---------- GET BY ID ----------
 @router.get("/{user_id}", response_model=ApiResponse[UserResponse])
-def get_user_by_id(user_id: UUID, db: Session = Depends(get_db)):
+def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     user = get_active_or_404(User, user_id, db, "Utilisateur")
     return ApiResponse(status_code=200, message="Utilisateur récupéré avec succès", data=user)
 
 
 # ---------- UPDATE (PATCH) ----------
 @router.patch("/{user_id}", response_model=ApiResponse[UserResponse])
-def update_user(user_id: UUID, updated: UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: int, updated: UserUpdate, db: Session = Depends(get_db)):
     user = get_active_or_404(User, user_id, db, "Utilisateur")
 
     donnees = updated.model_dump(exclude_unset=True)
@@ -67,7 +66,7 @@ def update_user(user_id: UUID, updated: UserUpdate, db: Session = Depends(get_db
 
 # ---------- SOFT DELETE ----------
 @router.delete("/{user_id}/soft", response_model=ApiResponse[UserResponse])
-def soft_delete_user(user_id: UUID, db: Session = Depends(get_db)):
+def soft_delete_user(user_id: int, db: Session = Depends(get_db)):
     user = get_active_or_404(User, user_id, db, "Utilisateur")
 
     user.is_deleted = True
@@ -80,7 +79,7 @@ def soft_delete_user(user_id: UUID, db: Session = Depends(get_db)):
 
 # ---------- RESTORE ----------
 @router.post("/{user_id}/restore", response_model=ApiResponse[UserResponse])
-def restore_user(user_id: UUID, db: Session = Depends(get_db)):
+def restore_user(user_id: int, db: Session = Depends(get_db)):
     user = get_deleted_or_404(User, user_id, db, "Utilisateur")
 
     user.is_deleted = False
@@ -93,7 +92,7 @@ def restore_user(user_id: UUID, db: Session = Depends(get_db)):
 
 # ---------- HARD DELETE ----------
 @router.delete("/{user_id}/hard", response_model=ApiResponse[None])
-def hard_delete_user(user_id: UUID, db: Session = Depends(get_db)):
+def hard_delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
@@ -112,7 +111,7 @@ def get_all_soft_deleted_users(db: Session = Depends(get_db)):
 
 # ---------- LISTINGS D'UN USER (relation) ----------
 @router.get("/{user_id}/listings", response_model=ApiResponse[list[ListingResponse]])
-def get_listings_by_user(user_id: UUID, db: Session = Depends(get_db)):
+def get_listings_by_user(user_id: int, db: Session = Depends(get_db)):
     user = get_active_or_404(User, user_id, db, "Utilisateur")
 
     listings = db.execute(

@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from decimal import Decimal
-from uuid import UUID
 from typing import Optional, Generic, TypeVar, List
 
 T = TypeVar("T")
@@ -27,7 +26,7 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: UUID
+    id: int
     email: EmailStr
     full_name: Optional[str]
     is_deleted: bool
@@ -41,8 +40,8 @@ class UserResponse(BaseModel):
 
 # ---------- LISTING ----------
 class ListingCreate(BaseModel):
-    user_id: UUID
-    category_id: UUID
+    user_id: int
+    category_id: int
     title: str
     description: str
     listing_type: str = "classified"
@@ -56,7 +55,7 @@ class ListingCreate(BaseModel):
 
 
 class ListingUpdate(BaseModel):
-    category_id: Optional[UUID] = None
+    category_id: Optional[int] = None
     title: Optional[str] = None
     description: Optional[str] = None
     listing_type: Optional[str] = None
@@ -70,9 +69,9 @@ class ListingUpdate(BaseModel):
 
 
 class ListingResponse(BaseModel):
-    id: UUID
-    user_id: UUID
-    category_id: UUID
+    id: int
+    user_id: int
+    category_id: int
     title: str
     description: str
     listing_type: str

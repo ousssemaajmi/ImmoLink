@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from sqlalchemy.sql import func
 from elasticsearch import NotFoundError
+
 from app.database import get_db
 from app.models import User, Listing, Category
 from app.utils import get_active_or_404, get_deleted_or_404
@@ -10,6 +11,11 @@ from app.validate import ListingCreate, ListingUpdate, ListingResponse, ListingS
 from app.elasticsearch_client import es_client, index_listing, delete_listing_from_index, LISTINGS_INDEX
 
 router = APIRouter(prefix="/listings", tags=["Listings"])
+
+
+def _listing_query():
+    """Requête de base qui charge automatiquement owner et category."""
+    return select(Listing).options(joinedload(Listing.owner), joinedload(Listing.category))
 
 
 # ---------- CREATE ----------
@@ -36,14 +42,22 @@ def create_listing(listing: ListingCreate, db: Session = Depends(get_db)):
 # ---------- GET ALL (actives) ----------
 @router.get("", response_model=ApiResponse[list[ListingResponse]])
 def get_all_listings(db: Session = Depends(get_db)):
-    listings = db.execute(select(Listing).where(Listing.is_deleted == False)).scalars().all()
+    listings = db.execute(
+        _listing_query().where(Listing.is_deleted == False)
+    ).unique().scalars().all()
     return ApiResponse(status_code=200, message=f"{len(listings)} annonce(s) trouvée(s)", data=listings)
 
 
 # ---------- GET BY ID ----------
 @router.get("/{listing_id}", response_model=ApiResponse[ListingResponse])
 def get_listing_by_id(listing_id: int, db: Session = Depends(get_db)):
-    listing = get_active_or_404(Listing, listing_id, db, "Annonce")
+    listing = db.execute(
+        _listing_query().where(Listing.id == listing_id, Listing.is_deleted == False)
+    ).unique().scalar_one_or_none()
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Annonce introuvable")
+
     return ApiResponse(status_code=200, message="Annonce récupérée avec succès", data=listing)
 
 
@@ -126,7 +140,9 @@ def hard_delete_listing(listing_id: int, db: Session = Depends(get_db)):
 # ---------- GET ALL SOFT DELETED ----------
 @router.get("/deleted/all", response_model=ApiResponse[list[ListingResponse]])
 def get_all_soft_deleted_listings(db: Session = Depends(get_db)):
-    listings = db.execute(select(Listing).where(Listing.is_deleted == True)).scalars().all()
+    listings = db.execute(
+        _listing_query().where(Listing.is_deleted == True)
+    ).unique().scalars().all()
     return ApiResponse(status_code=200, message=f"{len(listings)} annonce(s) supprimée(s)", data=listings)
 
 

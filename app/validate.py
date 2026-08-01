@@ -44,6 +44,16 @@ class UserSearchResult(BaseModel):
     full_name: Optional[str]
 
 
+# ---------- CATEGORY ----------
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+    class Config:
+        from_attributes = True
+
+
 # ---------- LISTING ----------
 class ListingCreate(BaseModel):
     user_id: int
@@ -76,8 +86,6 @@ class ListingUpdate(BaseModel):
 
 class ListingResponse(BaseModel):
     id: int
-    user_id: int
-    category_id: int
     title: str
     description: str
     listing_type: str
@@ -93,6 +101,9 @@ class ListingResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime]
     deleted_at: Optional[datetime]
+
+    owner: UserResponse
+    category: CategoryResponse
 
     class Config:
         from_attributes = True

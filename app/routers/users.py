@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.sql import func
+from elasticsearch import NotFoundError
 
 from app.database import get_db
 from app.models import User, Listing
 from app.utils import hash_password, get_active_or_404, get_deleted_or_404
-from app.validate import UserCreate, UserUpdate, UserResponse, ListingResponse, ApiResponse
+from app.validate import UserCreate, UserUpdate, UserResponse, UserSearchResult, ListingResponse, ApiResponse
+from app.elasticsearch_client import es_client, index_user, delete_user_from_index, USERS_INDEX
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -26,6 +28,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(nouvel_user)
     db.commit()
     db.refresh(nouvel_user)
+
+    index_user(nouvel_user)
 
     return ApiResponse(status_code=201, message="Utilisateur créé avec succès", data=nouvel_user)
 
@@ -61,6 +65,9 @@ def update_user(user_id: int, updated: UserUpdate, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(user)
+
+    index_user(user)
+
     return ApiResponse(status_code=200, message="Utilisateur mis à jour avec succès", data=user)
 
 
@@ -73,6 +80,8 @@ def soft_delete_user(user_id: int, db: Session = Depends(get_db)):
     user.deleted_at = func.now()
     db.commit()
     db.refresh(user)
+
+    index_user(user)
 
     return ApiResponse(status_code=200, message="Utilisateur supprimé (soft delete)", data=user)
 
@@ -87,18 +96,29 @@ def restore_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
+    index_user(user)
+
     return ApiResponse(status_code=200, message="Utilisateur restauré avec succès", data=user)
 
 
-# ---------- HARD DELETE ----------
+# ---------- HARD DELETE (seulement si déjà soft deleted) ----------
 @router.delete("/{user_id}/hard", response_model=ApiResponse[None])
 def hard_delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
 
+    if not user.is_deleted:
+        raise HTTPException(
+            status_code=400,
+            detail="Cet utilisateur doit d'abord être soft delete avant suppression définitive",
+        )
+
     db.delete(user)  # supprime aussi ses annonces (ON DELETE CASCADE)
     db.commit()
+
+    delete_user_from_index(user_id)
+
     return ApiResponse(status_code=200, message="Utilisateur supprimé définitivement (et ses annonces)", data=None)
 
 
@@ -119,3 +139,28 @@ def get_listings_by_user(user_id: int, db: Session = Depends(get_db)):
     ).scalars().all()
 
     return ApiResponse(status_code=200, message=f"{len(listings)} annonce(s) trouvée(s)", data=listings)
+
+
+# ---------- SEARCH (Elasticsearch) ----------
+@router.get("/search/query", response_model=ApiResponse[list[UserSearchResult]])
+def search_users(q: str):
+    try:
+        result = es_client.search(
+            index=USERS_INDEX,
+            query={
+                "bool": {
+                    "must": [{
+                        "multi_match": {
+                            "query": q,
+                            "fields": ["email", "full_name"],
+                        }
+                    }],
+                    "filter": [{"term": {"is_deleted": False}}],
+                }
+            },
+        )
+    except NotFoundError:
+        return ApiResponse(status_code=200, message="0 résultat(s) trouvé(s)", data=[])
+
+    hits = [hit["_source"] | {"id": int(hit["_id"])} for hit in result["hits"]["hits"]]
+    return ApiResponse(status_code=200, message=f"{len(hits)} résultat(s) trouvé(s)", data=hits)

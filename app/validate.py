@@ -38,6 +38,12 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class UserSearchResult(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: Optional[str]
+
+
 # ---------- LISTING ----------
 class ListingCreate(BaseModel):
     user_id: int
@@ -90,3 +96,14 @@ class ListingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ListingSearchResult(BaseModel):
+    id: int
+    title: str
+    description: str
+    price: Optional[float]
+    currency: str
+    location: Optional[str]
+    tags: List[str]
+    status: str
